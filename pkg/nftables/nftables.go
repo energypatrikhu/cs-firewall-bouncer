@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"time"
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
@@ -19,7 +18,6 @@ import (
 
 const (
 	chunkSize      = 200
-	defaultTimeout = "4h"
 )
 
 type nft struct {
@@ -147,7 +145,7 @@ func (n *nft) createSetAndRuleForOrigin(ctx *nftContext, origin string) error {
 			Table:        ctx.table,
 			KeyType:      ctx.typeIPAddr,
 			KeyByteOrder: binaryutil.BigEndian,
-			HasTimeout:   true,
+			HasTimeout:   false,
 		}
 
 		ctx.sets[origin] = set
@@ -188,8 +186,6 @@ func (n *nft) commitAddedDecisions() error {
 			continue
 		}
 
-		t, _ := time.ParseDuration(*decision.Duration)
-
 		origin := *decision.Origin
 
 		if origin == "lists" {
@@ -208,7 +204,7 @@ func (n *nft) commitAddedDecisions() error {
 					ip6[origin] = make([]nftables.SetElement, 0)
 				}
 
-				ip6[origin] = append(ip6[origin], nftables.SetElement{Timeout: t, Key: ip.To16()})
+				ip6[origin] = append(ip6[origin], nftables.SetElement{Key: ip.To16()})
 
 				if !n.v6.setOnly {
 					err := n.createSetAndRuleForOrigin(n.v6, origin)
@@ -232,7 +228,7 @@ func (n *nft) commitAddedDecisions() error {
 				ip4[origin] = make([]nftables.SetElement, 0)
 			}
 
-			ip4[origin] = append(ip4[origin], nftables.SetElement{Timeout: t, Key: ip.To4()})
+			ip4[origin] = append(ip4[origin], nftables.SetElement{Key: ip.To4()})
 
 			if !n.v4.setOnly {
 				err := n.createSetAndRuleForOrigin(n.v4, origin)
@@ -261,26 +257,19 @@ func (n *nft) Commit() error {
 }
 
 type tmpDecisions struct {
-	duration time.Duration
 	origin   string
 	scenario string
 }
 
-// remove duplicates, normalize decision timeouts, keep the longest decision when dups are present.
+// remove duplicates, keep the longest decision when dups are present.
 func normalizedDecisions(decisions []*models.Decision) []*models.Decision {
 	vals := make(map[string]tmpDecisions)
 	finalDecisions := make([]*models.Decision, 0)
 
 	for _, d := range decisions {
-		t, err := time.ParseDuration(*d.Duration)
-		if err != nil {
-			t, _ = time.ParseDuration(defaultTimeout)
-		}
-
 		*d.Value = strings.Split(*d.Value, "/")[0]
-		if longest, ok := vals[*d.Value]; !ok || t > longest.duration {
+		if _, ok := vals[*d.Value]; !ok {
 			vals[*d.Value] = tmpDecisions{
-				duration: t,
 				origin:   *d.Origin,
 				scenario: *d.Scenario,
 			}
@@ -288,13 +277,11 @@ func normalizedDecisions(decisions []*models.Decision) []*models.Decision {
 	}
 
 	for ip, decision := range vals {
-		d := decision.duration.String()
 		i := ip // copy it because we don't same value for all decisions as `ip` is same pointer :)
 		origin := decision.origin
 		scenario := decision.scenario
 
 		finalDecisions = append(finalDecisions, &models.Decision{
-			Duration: &d,
 			Value:    &i,
 			Origin:   &origin,
 			Scenario: &scenario,

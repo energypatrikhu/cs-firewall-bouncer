@@ -149,7 +149,7 @@ func (c *nftContext) initSetOnly() error {
 			Table:        c.table,
 			KeyType:      c.typeIPAddr,
 			KeyByteOrder: binaryutil.BigEndian,
-			HasTimeout:   true,
+			HasTimeout:   false,
 		}
 
 		if err := c.conn.AddSet(set, []nftables.SetElement{}); err != nil {
