@@ -113,7 +113,7 @@ func addDecisions(backend *backend.BackendCTX, decisions []*models.Decision, con
 			continue
 		}
 
-		log.Debugf("Adding '%s' for '%s'", *d.Value, *d.Duration)
+		log.Debugf("Adding '%s'", *d.Value)
 
 		nbNewDecisions++
 	}
